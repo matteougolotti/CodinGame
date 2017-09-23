@@ -1,19 +1,174 @@
-﻿open System
+﻿// https://www.codingame.com/ide/puzzle/ghost-in-the-cell
 
-type Factory (owner : int, cyborgs : int, production : int) =
+open System
+
+
+type Player = MAX | MIN | NONE
+
+
+let not player =
+  match player with
+  | MAX -> MIN
+  | MIN -> MAX
+  | NONE -> NONE
+
+
+type Factory (id : int, owner : Player, cyborgs : int, production : int) =
+  member this.id = id
   member this.owner = owner
   member this.cyborgs = cyborgs
   member this.production = production
 
-type Troop (owner : int, src : int, dst : int, cyborgs : int, turnsLeft : int) =
+
+type Troop (id : int, owner : Player, src : int, dst : int, cyborgs : int, turnsLeft : int) =
+  member this.id = id
   member this.owner = owner
   member this.src = src
   member this.dst = dst
   member this.cyborgs = cyborgs
   member this.turnsLeft = turnsLeft
 
+
+type ActionType = MOVE | WAIT
+
+
+type Action (action : ActionType, source : int, destination : int, cyborgs : int) =
+  member this.action = action
+  member this.source = source
+  member this.destination = destination
+  member this.cyborgs = cyborgs
+
+
+type Turn (factories : Factory[], troops : Troop[], player : Player) =
+  member this.factories = factories
+  member this.troops = troops
+  member this.player = player
+
+
+let isMaxPlayer p =
+  match p with
+  | y when y = 1 -> MAX
+  | _ -> MIN
+
+
+let action str =
+  match str with
+  | "MOVE" -> MOVE
+  | _ -> WAIT
+
+
+let playerFactories (graph : int[][]) (player : Player) (factories : Factory[]) =
+  Array.filter (fun (f : Factory) -> f.owner = player) factories
+  |> Array.map (fun f -> f.id)
+
+
+let enemyNeighbours (graph : int[][]) (factories : Factory[]) (factory : Factory) (player : Player) =
+  [| for i in graph.[factory.id] do yield factories.[i] |]
+  |> playerFactories graph player
+
+
+let fightInnerBattle (graph : int[][]) (factory : Factory) (defending : int) (attacking : int) =
+  let survivors = defending - attacking
+  match survivors with
+  | y when y > 0 -> Factory (factory.id, factory.owner, survivors, factory.production)
+  | y when y < 0 -> Factory (factory.id, not factory.owner, -survivors, factory.production)
+  | _ -> Factory (factory.id, NONE, 0, factory.production)
+
+
+let fightOuterBattle (graph : int[][]) (troops : Troop[]) (player : Player) (factory : Factory) =
+  let leavingCyborgs = troops
+                       |> Array.filter (fun t -> t.src = factory.id && t.turnsLeft = graph.[t.src].[t.dst]) 
+                       |> Array.length
+  let cyborgs = match factory.owner with
+                | NONE -> 0
+                | _ -> factory.cyborgs + factory.production - leavingCyborgs
+  let defendingInCyborgs = troops 
+                           |> Array.filter (fun t -> t.dst = factory.id && t.owner = factory.owner && t.turnsLeft = 0)
+                           |> Array.length
+  let attackingInCyborgs = troops
+                           |> Array.filter (fun t -> t.dst = factory.id && t.owner <> factory.owner && t.turnsLeft = 0)
+                           |> Array.length
+  let survivors = defendingInCyborgs - attackingInCyborgs
+  match survivors with
+  | y when y < 0 -> fightInnerBattle graph factory cyborgs -survivors
+  | _ -> Factory (factory.id, factory.owner, cyborgs + survivors, factory.production)
+
+
+let nextTurn (graph : int[][]) (prevTurn : Turn) (action : Action) (player : Player) =
+  let troops = prevTurn.troops
+               |> Array.filter (fun t -> t.turnsLeft > 0)
+               |> Array.map (fun t -> Troop (t.id, t.owner, t.src, t.dst, t.cyborgs, (t.turnsLeft - 1)))
+  let factories = prevTurn.factories
+                  |> Array.map (fightOuterBattle graph prevTurn.troops player)
+  Turn (factories, troops, player)
+
+
+let moves (graph : int[][]) (factories : Factory[]) (player : Player) =
+  let srcFactories = playerFactories graph player factories
+  let rec generateMoves src dst cyborgs firstMove = seq {
+    if firstMove then
+      yield Action(WAIT, 0, 0 ,0)
+    let dstFactories = 
+      enemyNeighbours graph factories factories.[srcFactories.[src]] player
+    if factories.[srcFactories.[src]].cyborgs > 1 then
+      yield Action(MOVE, srcFactories.[src], dstFactories.[dst], cyborgs)
+    if cyborgs < (factories.[srcFactories.[src]].cyborgs + 1) then
+      yield! generateMoves src dst (cyborgs + 1) false
+    if src < srcFactories.Length then
+      yield! generateMoves (src + 1) dst cyborgs false
+    if dst < dstFactories.Length then
+      yield! generateMoves src (dst + 1) cyborgs false
+  }
+  generateMoves 0 0 1 true
+
+
+let gameover (turn : Turn) =
+  let max = turn.factories
+            |> Array.filter (fun f -> f.owner = MAX)
+            |> Array.length
+  let min = turn.factories
+            |> Array.filter (fun f -> f.owner = MIN)
+            |> Array.length
+  
+  if max = 0 || min = 0 then true
+  else false
+
+
+let score (turn : Turn) =
+  let max = turn.factories
+            |> Array.filter (fun f -> f.owner = MAX)
+            |> Array.length
+  let min = turn.factories
+            |> Array.filter (fun f -> f.owner = MIN)
+            |> Array.length
+  max - min
+
+
+let minimax (turn : Turn) (depth : int) (α : int) (β : int) (player : Player) =
+  if depth = 0 || gameover turn then
+    score turn
+  else if player = MAX then
+    v := -∞
+    for each child of node
+      v := max(v, alphabeta(child, depth – 1, α, β, FALSE))
+      α := max(α, v)
+      if β ≤ α
+        break (* β cut-off *)
+      return v
+  else
+    v := +∞
+    for each child of node
+      v := min(v, alphabeta(child, depth – 1, α, β, TRUE))
+      β := min(β, v)
+      if β ≤ α
+        break (* α cut-off *)
+      return v
+
+
 let initFactoriesConnections n =
     [| for i in [0..n-1] do yield [| for j in [0..n-1] do yield -1 |] |]
+
+///////////////////////// GAME START ///////////////////////////////
 
 let factoryCount = int(Console.In.ReadLine()) (* the number of factories *)
 let linkCount = int(Console.In.ReadLine()) (* the number of links between factories *)
@@ -49,8 +204,8 @@ while true do
         let arg5 = int(token1.[6])
 
         match entityType with
-        | "FACTORY" -> mutFactories <- Array.append mutFactories [| Factory(arg1, arg2, arg3) |]
-        | "TROOP" -> mutTroops <- Array.append mutTroops [| Troop(arg1, arg2, arg3, arg4, arg5) |]
+        | "FACTORY" -> mutFactories <- Array.append mutFactories [| Factory (entityId, isMaxPlayer (arg1), arg2, arg3) |]
+        | "TROOP" -> mutTroops <- Array.append mutTroops [| Troop (entityId, isMaxPlayer (arg1), arg2, arg3, arg4, arg5) |]
         | _ -> ()
 
         ()
