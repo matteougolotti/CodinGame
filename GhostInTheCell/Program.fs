@@ -144,25 +144,39 @@ let score (turn : Turn) =
   max - min
 
 
-let minimax (turn : Turn) (depth : int) (α : int) (β : int) (player : Player) =
+let rec minimax (graph : int[][]) (turn : Turn) (depth : int) (α : int) (β : int) (player : Player) =
+  let mutable a = α
+  let mutable b = β
   if depth = 0 || gameover turn then
     score turn
   else if player = MAX then
-    v := -∞
-    for each child of node
-      v := max(v, alphabeta(child, depth – 1, α, β, FALSE))
-      α := max(α, v)
-      if β ≤ α
-        break (* β cut-off *)
-      return v
+    let mutable v = Microsoft.FSharp.Core.int.MinValue
+    let actions = moves graph turn.factories player
+    let mutable i = 0
+    let mutable n = true
+    while n do
+      let move = actions |> Seq.item i
+      i <- i + 1
+      let newTurn = nextTurn graph turn move player
+      v <- max v (minimax graph newTurn (depth - 1) a b MIN)
+      a <- max a v
+      if b <= a then
+        n <- false
+    v
   else
-    v := +∞
-    for each child of node
-      v := min(v, alphabeta(child, depth – 1, α, β, TRUE))
-      β := min(β, v)
-      if β ≤ α
-        break (* α cut-off *)
-      return v
+    let mutable v = Microsoft.FSharp.Core.int.MaxValue
+    let actions = moves graph turn.factories player
+    let mutable i = 0
+    let mutable n = true
+    while n do
+      let move = actions |> Seq.item i
+      i <- i + 1
+      let newTurn = nextTurn graph turn move player
+      v <- max v (minimax graph newTurn (depth - 1) a b MIN)
+      a <- max a v
+      if b <= a then
+        n <- false
+    v
 
 
 let initFactoriesConnections n =
