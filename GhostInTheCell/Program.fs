@@ -131,7 +131,6 @@ let rec minimax (graph : int[][]) (turn : Turn) (depth : int) (α : int) (β : i
   let mutable v = match player with
                   | MAX -> Microsoft.FSharp.Core.int.MinValue
                   | _ -> Microsoft.FSharp.Core.int.MaxValue
-
   if depth = 0 || gameover turn then
     score turn
   else
