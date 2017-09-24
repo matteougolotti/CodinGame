@@ -6,7 +6,7 @@ open System
 type Player = MAX | MIN | NONE
 
 
-let not player =
+let other player =
   match player with
   | MAX -> MIN
   | MIN -> MAX
@@ -57,21 +57,21 @@ let action str =
   | _ -> WAIT
 
 
-let playerFactories (graph : int[][]) (player : Player) (factories : Factory[]) =
+let playerFactories (player : Player) (factories : Factory[]) =
   Array.filter (fun (f : Factory) -> f.owner = player) factories
   |> Array.map (fun f -> f.id)
 
 
 let enemyNeighbours (graph : int[][]) (factories : Factory[]) (factory : Factory) (player : Player) =
   [| for i in graph.[factory.id] do yield factories.[i] |]
-  |> playerFactories graph player
+  |> playerFactories player
 
 
 let fightInnerBattle (graph : int[][]) (factory : Factory) (defending : int) (attacking : int) =
   let survivors = defending - attacking
   match survivors with
   | y when y > 0 -> Factory (factory.id, factory.owner, survivors, factory.production)
-  | y when y < 0 -> Factory (factory.id, not factory.owner, -survivors, factory.production)
+  | y when y < 0 -> Factory (factory.id, other factory.owner, -survivors, factory.production)
   | _ -> Factory (factory.id, NONE, 0, factory.production)
 
 
@@ -103,25 +103,6 @@ let nextTurn (graph : int[][]) (prevTurn : Turn) (action : Action) (player : Pla
   Turn (factories, troops, player)
 
 
-let moves (graph : int[][]) (factories : Factory[]) (player : Player) =
-  let srcFactories = playerFactories graph player factories
-  let rec generateMoves src dst cyborgs firstMove = seq {
-    if firstMove then
-      yield Action(WAIT, 0, 0 ,0)
-    let dstFactories = 
-      enemyNeighbours graph factories factories.[srcFactories.[src]] player
-    if factories.[srcFactories.[src]].cyborgs > 1 then
-      yield Action(MOVE, srcFactories.[src], dstFactories.[dst], cyborgs)
-    if cyborgs < (factories.[srcFactories.[src]].cyborgs + 1) then
-      yield! generateMoves src dst (cyborgs + 1) false
-    if src < srcFactories.Length then
-      yield! generateMoves (src + 1) dst cyborgs false
-    if dst < dstFactories.Length then
-      yield! generateMoves src (dst + 1) cyborgs false
-  }
-  generateMoves 0 0 1 true
-
-
 let gameover (turn : Turn) =
   let max = turn.factories
             |> Array.filter (fun f -> f.owner = MAX)
@@ -147,35 +128,35 @@ let score (turn : Turn) =
 let rec minimax (graph : int[][]) (turn : Turn) (depth : int) (α : int) (β : int) (player : Player) =
   let mutable a = α
   let mutable b = β
+  let mutable v = match player with
+                  | MAX -> Microsoft.FSharp.Core.int.MinValue
+                  | _ -> Microsoft.FSharp.Core.int.MaxValue
+
   if depth = 0 || gameover turn then
     score turn
-  else if player = MAX then
-    let mutable v = Microsoft.FSharp.Core.int.MinValue
-    let actions = moves graph turn.factories player
-    let mutable i = 0
-    let mutable n = true
-    while n do
-      let move = actions |> Seq.item i
-      i <- i + 1
-      let newTurn = nextTurn graph turn move player
-      v <- max v (minimax graph newTurn (depth - 1) a b MIN)
-      a <- max a v
-      if b <= a then
-        n <- false
-    v
   else
-    let mutable v = Microsoft.FSharp.Core.int.MaxValue
-    let actions = moves graph turn.factories player
-    let mutable i = 0
-    let mutable n = true
-    while n do
-      let move = actions |> Seq.item i
-      i <- i + 1
-      let newTurn = nextTurn graph turn move player
-      v <- max v (minimax graph newTurn (depth - 1) a b MIN)
-      a <- max a v
-      if b <= a then
-        n <- false
+    let mutable firstMove = true
+    let mutable prune = false
+    let srcFactories = playerFactories player turn.factories
+    let mutable src = 0
+    while not prune && src < srcFactories.Length do
+      let dstFactories = enemyNeighbours graph turn.factories turn.factories.[srcFactories.[src]] player
+      let mutable dst = 0
+      while not prune && dst < dstFactories.Length do
+        let mutable cyborgs = 1
+        while not prune && cyborgs < turn.factories.[srcFactories.[src]].cyborgs do
+          let move = match firstMove with
+                     | true -> Action (WAIT, 0, 0, 0)
+                     | _ -> Action (MOVE, src, dst, cyborgs)
+          firstMove <- false
+          let newTurn = nextTurn graph turn move player
+          match player with
+          | MAX -> v <- max v (minimax graph newTurn (depth - 1) a b MIN)
+                   a <- max a v
+                   if b <= a then prune <- true
+          | _ -> v <- min v (minimax graph newTurn (depth - 1) a b MAX)
+                 b <- min b v
+                 if b <= a then prune <- true
     v
 
 
@@ -234,3 +215,4 @@ while true do
     (* Any valid action, such as "WAIT" or "MOVE source destination cyborgs" *)
     printfn "WAIT"
     ()
+
