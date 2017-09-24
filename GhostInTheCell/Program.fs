@@ -1,6 +1,7 @@
 ﻿// https://www.codingame.com/ide/puzzle/ghost-in-the-cell
 
 open System
+open System.Collections.Generic
 
 
 type Player = MAX | MIN | NONE
@@ -37,6 +38,11 @@ type Action (action : ActionType, source : int, destination : int, cyborgs : int
   member this.source = source
   member this.destination = destination
   member this.cyborgs = cyborgs
+  member this.ToString = 
+    this.action.ToString() +
+    this.source.ToString() +
+    this.destination.ToString() +
+    this.cyborgs.ToString()
 
 
 type Turn (factories : Factory[], troops : Troop[], player : Player) =
@@ -48,6 +54,7 @@ type Turn (factories : Factory[], troops : Troop[], player : Player) =
 let isMaxPlayer p =
   match p with
   | y when y = 1 -> MAX
+  | y when y = 0 -> NONE
   | _ -> MIN
 
 
@@ -58,13 +65,37 @@ let action str =
 
 
 let playerFactories (player : Player) (factories : Factory[]) =
-  Array.filter (fun (f : Factory) -> f.owner = player) factories
+  factories
+  |> Array.filter (fun f -> f.owner = player)
   |> Array.map (fun f -> f.id)
 
 
 let enemyNeighbours (graph : int[][]) (factories : Factory[]) (factory : Factory) (player : Player) =
-  [| for i in graph.[factory.id] do yield factories.[i] |]
-  |> playerFactories player
+  factories
+  |> Array.filter (fun f -> graph.[factory.id].[f.id] >= 0)
+  |> Array.map (fun f -> f.id)
+
+
+type MoveGenerator (graph : int[][], factories : Factory[], player : Player) =
+  member private this.graph = graph
+  member private this.factories = factories
+  member private this.player = player
+  member private this.prevActions = new HashSet<string>();
+  member private this.rnd = new Random();
+  member private this.srcFactories = playerFactories player factories
+  member private this.waited = false
+  member this.nextRandomMove =
+    let mutable newMove = true
+    let src = this.rnd.Next(this.srcFactories.Length)
+    let dstFactories = enemyNeighbours this.graph this.factories this.factories.[this.srcFactories.[src]] this.player
+    let dst = this.rnd.Next(dstFactories.Length)
+    let cyborgs = this.rnd.Next(this.factories.[this.srcFactories.[src]].cyborgs)
+    let action = Action(MOVE, this.srcFactories.[src], dstFactories.[dst], cyborgs)
+    let a = action.ToString
+    if not (this.prevActions.Contains action.ToString) then
+      let res = this.prevActions.Add action.ToString
+      action
+     else this.nextRandomMove
 
 
 let fightInnerBattle (graph : int[][]) (factory : Factory) (defending : int) (attacking : int) =
@@ -245,10 +276,10 @@ while true do
         while not stop && cyborgs < factories.[srcFactories.[src]].cyborgs do
           let move = match firstMove with
                      | true -> Action (WAIT, 0, 0, 0)
-                     | _ -> Action (MOVE, src, dst, cyborgs)
+                     | _ -> Action (MOVE, srcFactories.[src], dstFactories.[dst], cyborgs)
           firstMove <- false
           let turn = Turn (factories, troops, MAX)
-          let newScore = minimax graph turn 200 α β MAX
+          let newScore = minimax graph turn 1 α β MAX
           if newScore > best then
             if not firstMove then
               bestAction <- MOVE
