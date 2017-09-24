@@ -156,6 +156,9 @@ let rec minimax (graph : int[][]) (turn : Turn) (depth : int) (α : int) (β : i
           | _ -> v <- min v (minimax graph newTurn (depth - 1) a b MAX)
                  b <- min b v
                  if b <= a then prune <- true
+          cyborgs <- cyborgs + 1
+        dst <- dst + 1
+      src <- src + 1
     v
 
 
@@ -166,6 +169,9 @@ let initFactoriesConnections n =
 
 let factoryCount = int(Console.In.ReadLine()) (* the number of factories *)
 let linkCount = int(Console.In.ReadLine()) (* the number of links between factories *)
+
+Console.Error.WriteLine("Factory count: " + factoryCount.ToString())
+Console.Error.WriteLine("Links count: " + linkCount.ToString())
 
 let mutable mutableGraph = initFactoriesConnections linkCount
 
@@ -202,6 +208,14 @@ while true do
         | "TROOP" -> mutTroops <- Array.append mutTroops [| Troop (entityId, isMaxPlayer (arg1), arg2, arg3, arg4, arg5) |]
         | _ -> ()
 
+        Console.Error.WriteLine("EntityId: " + entityId.ToString())
+        Console.Error.WriteLine("EntityType: " + entityType.ToString())
+        Console.Error.WriteLine("Arg1: " + arg1.ToString())
+        Console.Error.WriteLine("Arg2: " + arg2.ToString())
+        Console.Error.WriteLine("Arg3: " + arg3.ToString())
+        Console.Error.WriteLine("Arg4: " + arg4.ToString())
+        Console.Error.WriteLine("Arg5: " + arg5.ToString())
+
         ()
     
     let factories = mutFactories
@@ -209,9 +223,46 @@ while true do
     
     (* Write an action using printfn *)
     (* To debug: Console.Error.WriteLine("Debug message") *)
+    let α = Microsoft.FSharp.Core.int.MinValue
+    let β = Microsoft.FSharp.Core.int.MaxValue
+
+    let mutable bestAction = WAIT
+    let mutable bestSrc = 0
+    let mutable bestDst = 0
+    let mutable bestCyborgs = 0
+
+    let mutable best =  Microsoft.FSharp.Core.int.MinValue
+    let mutable stop = false
+    let mutable firstMove = true
+
+    let mutable src = 0
+    let srcFactories = playerFactories MAX factories
+    while not stop && src < srcFactories.Length do
+      let mutable dst = 0
+      let dstFactories = enemyNeighbours graph factories factories.[srcFactories.[src]] MAX
+      while not stop && dst < dstFactories.Length do
+        let mutable cyborgs = 1
+        while not stop && cyborgs < factories.[srcFactories.[src]].cyborgs do
+          let move = match firstMove with
+                     | true -> Action (WAIT, 0, 0, 0)
+                     | _ -> Action (MOVE, src, dst, cyborgs)
+          firstMove <- false
+          let turn = Turn (factories, troops, MAX)
+          let newScore = minimax graph turn 200 α β MAX
+          if newScore > best then
+            if not firstMove then
+              bestAction <- MOVE
+            bestSrc <- src
+            bestDst <- dst
+            bestCyborgs <- cyborgs
+            else firstMove <- false
+          cyborgs <- cyborgs + 1
+        dst <- dst + 1
+      src <- src + 1
     
+    if bestAction = WAIT then printfn "WAIT"
+    else printfn "MOVE %d %d %d" bestSrc bestDst bestCyborgs
 
     (* Any valid action, such as "WAIT" or "MOVE source destination cyborgs" *)
     printfn "WAIT"
     ()
-
