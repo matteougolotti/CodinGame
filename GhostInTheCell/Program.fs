@@ -85,7 +85,6 @@ type MoveGenerator (graph : int[][], factories : Factory[], player : Player) =
   member private this.srcFactories = playerFactories player factories
   member private this.waited = false
   member this.nextRandomMove =
-    let mutable newMove = true
     let src = this.rnd.Next(this.srcFactories.Length)
     let dstFactories = enemyNeighbours this.graph this.factories this.factories.[this.srcFactories.[src]] this.player
     let dst = this.rnd.Next(dstFactories.Length)
@@ -95,7 +94,7 @@ type MoveGenerator (graph : int[][], factories : Factory[], player : Player) =
     if not (this.prevActions.Contains action.ToString) then
       let res = this.prevActions.Add action.ToString
       action
-     else this.nextRandomMove
+    else this.nextRandomMove
 
 
 let fightInnerBattle (graph : int[][]) (factory : Factory) (defending : int) (attacking : int) =
@@ -154,6 +153,31 @@ let score (turn : Turn) =
             |> Array.filter (fun f -> f.owner = MIN)
             |> Array.length
   max - min
+
+
+type Result (won : int, played : int) =
+  member this.won = won
+  member this.played = played
+
+
+let rec montecarlo (graph : int[][]) (turn : Turn) (depth : int) (player : Player) : Result =
+  if (depth = 0) || (gameover turn) then
+    let s = score turn
+    if s > 0 then Result (1, 1)
+    else Result (0, 1)
+  else
+    let mutable won = 0
+    let mutable played = 0
+    let rnd = new Random()
+    let mg = MoveGenerator (graph, turn.factories, player)
+    let movesToPlay = rnd.Next(10)
+    for i in [0..movesToPlay] do
+      let move = mg.nextRandomMove
+      let newTurn = nextTurn graph turn move player
+      let res = montecarlo graph newTurn (depth - 1) (other player)
+      won <- won + res.won
+      played <- played + res.played
+    Result (won, played)
 
 
 let rec minimax (graph : int[][]) (turn : Turn) (depth : int) (α : int) (β : int) (player : Player) =
