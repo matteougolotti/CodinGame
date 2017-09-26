@@ -72,7 +72,7 @@ let playerFactories (player : Player) (factories : Factory[]) =
 
 let enemyNeighbours (graph : int[][]) (factories : Factory[]) (factory : Factory) (player : Player) =
   factories
-  |> Array.filter (fun f -> graph.[factory.id].[f.id] >= 0)
+  |> Array.filter (fun f -> graph.[factory.id].[f.id] >= 0 && f.owner <> player)
   |> Array.map (fun f -> f.id)
 
 
@@ -303,7 +303,7 @@ while true do
                      | _ -> Action (MOVE, srcFactories.[src], dstFactories.[dst], cyborgs)
           firstMove <- false
           let turn = Turn (factories, troops, MAX)
-          let newScore = minimax graph turn 1 α β MAX
+          let newScore = minimax graph turn 10 α β MAX
           if newScore > best then
             if not firstMove then
               bestAction <- MOVE
@@ -315,8 +315,10 @@ while true do
         dst <- dst + 1
       src <- src + 1
     
+    let dstFactories = enemyNeighbours graph factories factories.[srcFactories.[bestSrc]] MAX
+
     if bestAction = WAIT then printfn "WAIT"
-    else printfn "MOVE %d %d %d" bestSrc bestDst bestCyborgs
+    else printfn "MOVE %d %d %d" factories.[srcFactories.[bestSrc]].id factories.[dstFactories.[bestDst]].id bestCyborgs
 
     (* Any valid action, such as "WAIT" or "MOVE source destination cyborgs" *)
     printfn "WAIT"
